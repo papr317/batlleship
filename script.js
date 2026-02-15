@@ -10,6 +10,7 @@ let usedQuestions = new Set();
 let embargoList = {};
 let embargoTimers = {};
 let selectedAnswer = null; // Для отслеживания выбранного варианта
+let revealedCells = {}; // { 't1-c5': 'hit'|'miss'|'error'|'sunk' }
 const GRID_SIZE = 9;
 const LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ё', 'Ж', 'З'];
 const SHIP_CONFIG = [5, 4, 3, 3, 2];
@@ -62,6 +63,9 @@ async function init() {
   console.log('🛢️ Создание игровых полей...');
   createGrid('grid1', 1);
   createGrid('grid2', 2);
+
+  // После создания сеток восстанавливаем визуальное состояние из кэша (если есть)
+  restoreVisualState();
 
   // Новая конфигурация: 1x5, 1x4, 2x3, 1x2 (итого 5 кораблей)
   if (ships[1].length === 0) {
@@ -137,8 +141,12 @@ function generateFleet(config) {
 // 5. Выстрел
 function makeShot(targetTeam, idx) {
   const cellId = `t${targetTeam}-c${idx}`;
+  // Человеко-читаемая координата, например А1
+  const col = idx % GRID_SIZE;
+  const row = Math.floor(idx / GRID_SIZE) + 1;
+  const coord = `${LETTERS[col]}${row}`;
   console.log(
-    `🎯 ВЫСТРЕЛ по клетке ${cellId} (команда ${activeTeam} стреляет в команду ${targetTeam})`,
+    `🎯 ВЫСТРЕЛ по клетке ${cellId} (коорд ${coord}) — команда ${activeTeam} стреляет в команду ${targetTeam}`,
   );
 
   // Проверяем эмбарго перед тем как открывать модалку
@@ -194,6 +202,10 @@ function makeShot(targetTeam, idx) {
   const revealJudgement = document.getElementById('reveal-judgement');
   if (revealJudgement) revealJudgement.style.display = 'none';
   document.getElementById('btn-check').disabled = true;
+  // Синхронизируем таймер модалки с основным таймером
+  const mt = document.getElementById('modal-timer');
+  if (mt)
+    mt.innerText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
   document.getElementById('modal').style.display = 'flex';
 }
 
@@ -233,17 +245,35 @@ function startTimer() {
     timeLeft--;
     document.getElementById('timer').innerText =
       `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
-    if (timeLeft <= 0) switchTurn();
+    // Если открыта модалка вопроса — синхронизируем её таймер
+    const modal = document.getElementById('modal');
+    if (modal && modal.style.display === 'flex') {
+      const mt = document.getElementById('modal-timer');
+      if (mt)
+        mt.innerText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+    }
+    if (timeLeft <= 0) {
+      // Если модалка открыта, закрываем её при окончании времени
+      const modal = document.getElementById('modal');
+      if (modal && modal.style.display === 'flex') {
+        modal.style.display = 'none';
+        document.getElementById('media-placeholder').style.display = 'none';
+        document.getElementById('m-header').innerText = 'ОГНЕВОЙ КОНТАКТ';
+        isProcessing = false;
+      }
+      switchTurn();
+    }
   }, 1000);
 }
 
 function setEmbargo(cellId) {
   console.log(`🚫 ЭМБАРГО установлено на клетку ${cellId} на 5 минут`);
   embargoList[cellId] = Date.now() + 5 * 60 * 1000; // 5 минут
-  clearTimeout(embargoTimers[cellId]);
-
+  // Запускаем пер-клеточный таймер отображения оставшегося времени
+  startEmbargoTimer(cellId);
   // Показываем модальное окно эмбарго сразу
   showEmbargoModal(cellId);
+  saveGameState();
 }
 
 function showEmbargoModal(cellId) {
@@ -262,16 +292,55 @@ function showEmbargoModal(cellId) {
       embargoModal.style.display = 'none';
       delete embargoTimers[cellId];
     } else {
-      embargoTimers[cellId] = setTimeout(updateEmbargoDisplay, 1000);
+      setTimeout(updateEmbargoDisplay, 1000);
     }
   };
 
   updateEmbargoDisplay();
 
-  // Закрыть модалку автоматически через 5 секунд
-  setTimeout(() => {
-    embargoModal.style.display = 'none';
-  }, 5000);
+  // Не закрываем модалку искусственно — пользователь видит реальное время.
+}
+
+function startEmbargoTimer(cellId) {
+  // Очищаем старый интервал
+  if (embargoTimers[cellId]) {
+    clearInterval(embargoTimers[cellId]);
+  }
+
+  const cell = document.getElementById(cellId);
+  if (!cell) return;
+  cell.classList.add('embargo');
+
+  // Создаём бейдж для таймера внутри клетки
+  let badge = cell.querySelector('.embargo-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'embargo-badge';
+    badge.style.cssText =
+      'position:absolute; top:2px; right:2px; background:#c62828; color:#fff; padding:2px 6px; border-radius:6px; font-size:10px; z-index:5;';
+    cell.style.position = 'relative';
+    cell.appendChild(badge);
+  }
+
+  const tick = () => {
+    const remaining = Math.max(0, (embargoList[cellId] || 0) - Date.now());
+    if (remaining <= 0) {
+      clearInterval(embargoTimers[cellId]);
+      delete embargoTimers[cellId];
+      delete embargoList[cellId];
+      if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
+      cell.classList.remove('embargo');
+      saveGameState();
+      return;
+    }
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    badge.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Немедленный вызов и интервал
+  tick();
+  embargoTimers[cellId] = setInterval(tick, 1000);
 }
 
 function isEmbargoed(cellId) {
@@ -324,7 +393,14 @@ function checkEmbargo() {
 }
 
 function saveGameState() {
-  const data = { scores, ships, activeTeam, usedQuestions: Array.from(usedQuestions), embargoList };
+  const data = {
+    scores,
+    ships,
+    activeTeam,
+    usedQuestions: Array.from(usedQuestions),
+    embargoList,
+    revealedCells,
+  };
   // Сохраняем в localStorage
   try {
     localStorage.setItem('navy_battle_save', JSON.stringify(data));
@@ -368,9 +444,56 @@ function loadGameState() {
       activeTeam = data.activeTeam || activeTeam;
       usedQuestions = new Set(data.usedQuestions || []);
       embargoList = data.embargoList || {};
+      revealedCells = data.revealedCells || {};
     } catch (e) {
       console.warn('Failed to parse saved state', e);
     }
+  }
+}
+
+function restoreVisualState() {
+  // Применяем визуальные классы к клеткам из сохранённого состояния
+  try {
+    // Сначала очистим все состояния
+    for (let t = 1; t <= 2; t++) {
+      for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        const el = document.getElementById(`t${t}-c${i}`);
+        if (!el) continue;
+        el.classList.remove('hit', 'miss', 'error', 'sunk', 'revealed', 'embargo');
+        el.innerText = '';
+      }
+    }
+
+    // Восстановим revealedCells
+    for (const key in revealedCells) {
+      const el = document.getElementById(key);
+      if (!el) continue;
+      const st = revealedCells[key];
+      el.classList.add('revealed');
+      if (st === 'hit') {
+        el.classList.add('hit');
+        el.innerText = '💥';
+      } else if (st === 'miss') {
+        el.classList.add('miss');
+        el.innerText = '•';
+      } else if (st === 'error') {
+        el.classList.add('error');
+        el.innerText = '❌';
+      } else if (st === 'sunk') {
+        el.classList.add('sunk');
+        el.innerText = '';
+      }
+    }
+
+    // Восстановим эмбарго
+    for (const id in embargoList) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('embargo');
+      // Запускаем пер-клеточный таймер для оставшегося эмбарго
+      startEmbargoTimer(id);
+    }
+  } catch (e) {
+    console.warn('restoreVisualState failed', e);
   }
 }
 
@@ -451,6 +574,8 @@ function resolveShot(isCorrect) {
   const placeholder = document.getElementById('media-placeholder');
 
   if (cell) cell.classList.add('revealed');
+  // Сохраняем визуальное состояние для восстановления после перезагрузки
+  const cellKey = `t${targetTeam}-c${idx}`;
   let p = isCorrect ? 10 : -5;
 
   if (isCorrect) {
@@ -459,12 +584,15 @@ function resolveShot(isCorrect) {
       p += 10;
       cell.classList.add('hit');
       cell.innerText = '💥';
+      revealedCells[cellKey] = 'hit';
       placeholder.style.display = 'block';
 
       if (ship.hits === ship.coords.length) {
         p += 15;
         ship.sunk = true;
         markSunk(targetTeam, ship);
+        // Отметим все клетки корабля как потопленные в кеше
+        ship.coords.forEach((ci) => (revealedCells[`t${targetTeam}-c${ci}`] = 'sunk'));
         document.getElementById('m-header').innerText = 'КОРАБЛЬ УНИЧТОЖЕН! (+35)';
         if (document.getElementById('snd-hit')) document.getElementById('snd-hit').play();
         const randomSink = SINK_OPTIONS[Math.floor(Math.random() * SINK_OPTIONS.length)];
@@ -477,6 +605,7 @@ function resolveShot(isCorrect) {
     } else {
       if (cell) cell.classList.add('miss');
       if (cell) cell.innerText = '•';
+      revealedCells[cellKey] = 'miss';
       document.getElementById('m-header').innerText = 'МИМО! (Верно +10)';
       if (document.getElementById('snd-shot')) document.getElementById('snd-shot').play();
       imgElement.src = GIF_MISS;
@@ -485,6 +614,7 @@ function resolveShot(isCorrect) {
   } else {
     if (cell) cell.innerText = '❌';
     if (cell) cell.classList.add('error');
+    revealedCells[cellKey] = 'error';
     document.getElementById('m-header').innerText = 'ОШИБКА! (-5)';
     setEmbargo(`t${targetTeam}-c${idx}`);
   }
@@ -563,6 +693,8 @@ function switchTurn() {
   console.log(`📊 Баллы - СИНИЙ: ${scores[1]}, КРАСНЫЙ: ${scores[2]}`);
   updateFieldVisuals();
   startTimer();
+  // Сохраняем смену хода в кэше
+  saveGameState();
 }
 
 function updateFieldVisuals() {
