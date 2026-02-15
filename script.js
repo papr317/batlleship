@@ -304,28 +304,11 @@ function setEmbargo(cellId) {
 }
 
 function showEmbargoModal(cellId) {
-  const embargoModal = document.getElementById('embargo-modal');
-  const embargoTimer = document.getElementById('embargo-timer');
-
-  embargoModal.style.display = 'flex';
-
-  const updateEmbargoDisplay = () => {
-    const remaining = Math.max(0, embargoList[cellId] - Date.now());
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-    embargoTimer.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-
-    if (remaining <= 0) {
-      embargoModal.style.display = 'none';
-      delete embargoTimers[cellId];
-    } else {
-      setTimeout(updateEmbargoDisplay, 1000);
-    }
-  };
-
-  updateEmbargoDisplay();
-
-  // Не закрываем модалку искусственно — пользователь видит реальное время.
+  // Эмбарго теперь отображается только бейджем на самой клетке.
+  // Для обратной совместимости просто логируем попытки открыть модалку.
+  console.log(
+    `⛔ Попытка открыть модалку эмбарго для ${cellId} — модалка отключена, показывается бейдж на клетке.`,
+  );
 }
 
 function startEmbargoTimer(cellId) {
@@ -390,27 +373,20 @@ function isEmbargoed(cellId) {
 
 // Показать таймер эмбарго при попытке нажать на заблокированную клетку
 function showEmbargoTimer(cellId) {
+  // Показываем краткое уведомление в заголовке модалки и логируем; основной таймер виден на клетке.
   if (!embargoList[cellId]) return;
-
-  const embargo = document.getElementById('embargo-modal');
-  embargo.style.display = 'flex';
-
-  const updateTimer = () => {
-    const remaining = Math.max(0, embargoList[cellId] - Date.now());
-    if (remaining <= 0) {
-      embargo.style.display = 'none';
-      delete embargoList[cellId];
-      document.getElementById(cellId)?.classList.remove('embargo');
-      return;
-    }
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-    document.getElementById('embargo-timer').innerText =
-      `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    setTimeout(updateTimer, 1000);
-  };
-
-  updateTimer();
+  const remaining = Math.max(0, embargoList[cellId] - Date.now());
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  const msg = `⛔ Клетка заблокирована: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+  console.log(msg + ` (cell=${cellId})`);
+  // Покажем сообщение в модалке действий (временное) — если она открыта
+  const mh = document.getElementById('m-header');
+  const prev = mh ? mh.innerText : null;
+  if (mh) mh.innerText = msg;
+  setTimeout(() => {
+    if (mh && prev) mh.innerText = prev;
+  }, 2500);
 }
 
 function checkEmbargo() {
@@ -567,7 +543,7 @@ function showOptions() {
           cursor: pointer; transition: 0.3s; border: none; font-size: 14px; width: 100%;
           font-family: 'Segoe UI', sans-serif; font-weight: bold;
         ">
-        <strong>${letters[i]})</strong> ${opt}
+        <span style='margin-right:8px'>🧭</span><strong>${letters[i]})</strong> ${opt}
       </button>`;
     }
   });
