@@ -1,0 +1,354 @@
+:root {
+  --team1: #00d2ff;
+  --team2: #ff4b2b;
+  --gold: #ffd700;
+  --glass: rgba(0, 20, 40, 0.7);
+  --wood: #3e2723;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: white;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)),
+    url('https://media.tenor.com/-DOaMqxCOyQAAAAM/water-florida.gif');
+  background-size: cover;
+  background-attachment: fixed;
+  background-position: center;
+  background-repeat: no-repeat;
+  overflow-x: hidden;
+}
+
+h1 {
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px var(--gold);
+  color: var(--gold);
+  letter-spacing: 5px;
+  text-align: center;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.turn-indicator {
+  padding: 12px 40px;
+  border-radius: 50px;
+  color: #000;
+  font-weight: 900;
+  text-transform: uppercase;
+  transition: 0.5s;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.timer-box {
+  background: #000;
+  border: 2px solid var(--gold);
+  padding: 10px 20px;
+  font-size: 28px;
+  color: var(--gold);
+  border-radius: 15px;
+  font-family: monospace;
+}
+
+.main-game {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 40px;
+  width: 100%;
+}
+
+.field-container {
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  padding: 25px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 25px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  transition: 0.4s;
+}
+
+.target-field {
+  border-color: var(--gold);
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+}
+
+.disabled-field {
+  opacity: 0.3;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+
+.score-display {
+  font-size: 54px;
+  font-weight: 900;
+  margin: 10px 0;
+  color: var(--gold);
+}
+
+.t1-color {
+  color: var(--team1);
+}
+
+.t2-color {
+  color: var(--team2);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 30px repeat(8, 45px);
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.cell {
+  width: 45px;
+  height: 45px;
+  background: rgba(0, 40, 80, 0.6);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.2);
+  transition: 0.2s;
+}
+
+.cell:hover {
+  background: var(--gold);
+  color: black;
+}
+
+.cell.hit {
+  background: var(--team2) !important;
+  color: white;
+  font-size: 22px;
+  opacity: 1 !important;
+}
+
+.cell.miss {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: white;
+  opacity: 1 !important;
+}
+
+.label {
+  color: var(--gold);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Правила - Капитанская доска */
+.instructions {
+  background: var(--wood);
+  background-image: url('https://www.transparenttextures.com/patterns/dark-leather.png');
+  margin-top: 40px;
+  padding: 25px;
+  border-radius: 20px;
+  border: 4px solid #5d4037;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8), inset 0 0 15px #000;
+  max-width: 800px;
+  color: #f4e4bc;
+}
+
+.instructions h3 {
+  text-align: center;
+  color: var(--gold);
+  margin-top: 0;
+  letter-spacing: 2px;
+}
+
+.inst-grid {
+  display: flex;
+  gap: 20px;
+}
+
+.inst-item {
+  flex: 1;
+  font-size: 14px;
+  border-left: 1px solid rgba(255, 215, 0, 0.2);
+  padding-left: 15px;
+}
+
+/* Модалки */
+#modal,
+#finish-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: #f4e4bc;
+  color: #2c3e50;
+  padding: 40px;
+  border-radius: 20px;
+  border: 8px solid var(--wood);
+  max-width: 500px;
+  text-align: center;
+  box-shadow: 0 0 50px #000;
+}
+
+#q-text {
+  font-size: 26px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+#answer-box {
+  display: none;
+  background: rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  margin: 15px 0;
+  font-size: 22px;
+  font-weight: bold;
+  color: #1b5e20;
+}
+
+.btn {
+  padding: 12px 25px;
+  cursor: pointer;
+  font-weight: bold;
+  border-radius: 30px;
+  text-transform: uppercase;
+  border: none;
+}
+
+.btn-show {
+  background: var(--wood);
+  color: white;
+  width: 100%;
+}
+
+.btn-yes {
+  background: #2ecc71;
+  color: white;
+  flex: 1;
+}
+
+.btn-no {
+  background: #e74c3c;
+  color: white;
+  flex: 1;
+}
+/* Разделяем кнопки в модалке */
+.btn-group {
+  display: flex;
+  gap: 20px;
+  /* Расстояние между кнопками */
+  margin-top: 15px;
+}
+
+/* Опускаем анимацию баллов ниже и делаем её крупнее */
+@keyframes up {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+    scale: 1;
+  }
+
+  100% {
+    transform: translateY(-40px);
+    opacity: 0;
+    scale: 1.2;
+  }
+
+  /* Уменьшил вылет с 80 до 40 */
+}
+
+/* Скругления для кнопок в группе */
+.btn-yes,
+.btn-no {
+  border-radius: 12px;
+  padding: 15px;
+  font-size: 16px;
+}
+.btn:disabled {
+  opacity: 0.3;
+}
+
+.btn-finish {
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid var(--gold);
+  color: var(--gold);
+  margin: 30px 0;
+  padding: 15px 50px;
+}
+
+.btn-finish:hover {
+  background: var(--gold);
+  color: black;
+  box-shadow: 0 0 20px var(--gold);
+}
+
+#media-placeholder {
+  display: none;
+  margin-bottom: 20px;
+}
+
+#media-placeholder img {
+  width: 100%;
+  border-radius: 10px;
+}
+
+.final-scores {
+  display: flex;
+  justify-content: space-around;
+  font-size: 40px;
+  font-weight: 900;
+  margin: 20px 0;
+}
+
+
+/* Поле 9х9 */
+.grid {
+  grid-template-columns: 30px repeat(9, 45px);
+  /* Было 8, стало 9 */
+}
+
+/* Затопленный корабль - ЧЕРНЫЙ */
+.cell.sunk {
+  background-color: #000 !important;
+  border: 1px solid #444;
+  color: white;
+  font-size: 20px;
+}
+
+/* Поврежденный - КРАСНЫЙ ГОРЯЩИЙ */
+.cell.hit {
+  background: radial-gradient(circle, #ffeb3b, #f44336) !important;
+  box-shadow: inset 0 0 10px #000;
+}
+
+/* Эмбарго - БЛОКИРОВКА */
+.cell.embargo {
+  background: repeating-linear-gradient(45deg, #333, #333 5px, #111 5px, #111 10px) !important;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Неверный ответ */
+.cell.error {
+  background-color: #5d4037 !important;
+  color: #ff5252;
+}
