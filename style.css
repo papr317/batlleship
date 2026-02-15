@@ -106,7 +106,7 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: 30px repeat(8, 45px);
+  grid-template-columns: 30px repeat(9, 45px);
   gap: 3px;
   background: rgba(255, 255, 255, 0.05);
   padding: 8px;
@@ -198,6 +198,46 @@ h1 {
   align-items: center;
 }
 
+/* Модальный оверлей для эмбарго */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Кнопка закрытия модалок */
+.close-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: #d32f2f;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-weight: bold;
+  z-index: 10;
+}
+
+.close-btn:hover {
+  background: #b71c1c;
+  transform: scale(1.1);
+}
+
 .modal-content {
   background: #f4e4bc;
   color: #2c3e50;
@@ -207,6 +247,7 @@ h1 {
   max-width: 500px;
   text-align: center;
   box-shadow: 0 0 50px #000;
+  position: relative;
 }
 
 #q-text {
@@ -251,6 +292,7 @@ h1 {
   color: white;
   flex: 1;
 }
+
 /* Разделяем кнопки в модалке */
 .btn-group {
   display: flex;
@@ -283,6 +325,7 @@ h1 {
   padding: 15px;
   font-size: 16px;
 }
+
 .btn:disabled {
   opacity: 0.3;
 }
@@ -321,34 +364,93 @@ h1 {
 
 
 /* Поле 9х9 */
-.grid {
-  grid-template-columns: 30px repeat(9, 45px);
-  /* Было 8, стало 9 */
-}
+/* Удалено дублирование - уже определено выше */
 
 /* Затопленный корабль - ЧЕРНЫЙ */
 .cell.sunk {
-  background-color: #000 !important;
-  border: 1px solid #444;
+  background-color: #1a1a1a !important;
+  border: 2px solid #444;
   color: white;
   font-size: 20px;
+  box-shadow: inset 0 0 5px rgba(255, 0, 0, 0.3);
 }
 
-/* Поврежденный - КРАСНЫЙ ГОРЯЩИЙ */
+/* Поврежденный - ОГНЕННЫЙ */
 .cell.hit {
   background: radial-gradient(circle, #ffeb3b, #f44336) !important;
-  box-shadow: inset 0 0 10px #000;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5), 0 0 15px #ff6b00;
+  animation: pulse-hit 0.6s ease-in-out;
+}
+
+@keyframes pulse-hit {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
 }
 
 /* Эмбарго - БЛОКИРОВКА */
 .cell.embargo {
   background: repeating-linear-gradient(45deg, #333, #333 5px, #111 5px, #111 10px) !important;
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.6;
+  border: 1px dashed #ff5252;
 }
 
 /* Неверный ответ */
 .cell.error {
   background-color: #5d4037 !important;
   color: #ff5252;
+  font-weight: bold;
+}
+
+/* Стиль карточки эмбарго */
+.embargo-card {
+  background: linear-gradient(135deg, #fff3e0, #ffe0b2) !important;
+  border: 5px solid #d32f2f !important;
+  box-shadow: 0 0 50px rgba(211, 47, 47, 0.6), inset 0 0 20px rgba(0, 0, 0, 0.1) !important;
+  min-width: 450px;
+  max-width: 500px;
+  text-align: center;
+  padding: 50px 40px !important;
+  position: relative;
+}
+
+.embargo-card h2 {
+  color: #d32f2f !important;
+  margin: 0 0 15px 0;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.embargo-card p {
+  color: #333 !important;
+}
+
+/* Кнопки вариантов ответа */
+.btn-option {
+  background: #424242 !important;
+  color: white !important;
+  padding: 12px !important;
+  text-align: left !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  border: none !important;
+  font-size: 16px !important;
+  width: 100% !important;
+  font-family: 'Segoe UI', Tahoma, sans-serif !important;
+}
+
+.btn-option:hover {
+  background: #555 !important;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3) !important;
+}
+
+.btn-option:active {
+  background: #1976d2 !important;
 }

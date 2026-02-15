@@ -6,11 +6,13 @@ let isProcessing = false,
   timerId = null,
   timeLeft = 120;
 let currentQuestionData = null;
-let usedQuestions = new Set(); // Для исключения повторов
-let embargoList = {}; // Для блокировки клеток на 5 минут
-
+let usedQuestions = new Set();
+let embargoList = {};
+let embargoTimers = {};
+let selectedAnswer = null; // Для отслеживания выбранного варианта
 const GRID_SIZE = 9;
 const LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ё', 'Ж', 'З'];
+const SHIP_CONFIG = [5, 4, 3, 3, 2];
 
 // ПУТИ К МЕДИА
 const GIFS_HIT = ['media/попадание.png', 'media/попадание2.png'];
@@ -23,6 +25,7 @@ const SINK_OPTIONS = [
 // 1. Загрузка CSV (с учетом твоего нового формата: id;q;img;ans;opt1...)
 async function loadQuestions() {
   try {
+    console.log('📂 Загрузка вопросов из CSV...');
     const response = await fetch('questions.csv');
     if (!response.ok) throw new Error('Файл не найден');
     const text = await response.text();
@@ -41,28 +44,40 @@ async function loadQuestions() {
         });
       }
     }
+    console.log(`✅ Загружено ${DATABASE.length} вопросов`);
     loadGameState(); // Пробуем загрузить кэш
     return true;
   } catch (e) {
-    console.error('Ошибка загрузки:', e);
+    console.error('❌ Ошибка загрузки:', e);
     return false;
   }
 }
 
 // 2. Инициализация игры
 async function init() {
+  console.log('🎮 =====  ИНИЦИАЛИЗАЦИЯ ИГРЫ  =====');
+  console.log('🎮 МОРСКОЙ БОЙ: АЛГЕБРА 9 КЛАСС');
+  console.log('=============================');
   await loadQuestions();
+  console.log('🛢️ Создание игровых полей...');
   createGrid('grid1', 1);
   createGrid('grid2', 2);
 
   // Новая конфигурация: 1x5, 1x4, 2x3, 1x2 (итого 5 кораблей)
-  if (ships[1].length === 0) ships[1] = generateFleet([5, 4, 3, 3, 2]);
-  if (ships[2].length === 0) ships[2] = generateFleet([5, 4, 3, 3, 2]);
+  if (ships[1].length === 0) {
+    ships[1] = generateFleet([5, 4, 3, 3, 2]);
+    console.log(`⚓ Флот СИНЕГО: ${ships[1].length} кораблей размещены`);
+  }
+  if (ships[2].length === 0) {
+    ships[2] = generateFleet([5, 4, 3, 3, 2]);
+    console.log(`⚓ Флот КРАСНОГО: ${ships[2].length} кораблей размещены`);
+  }
 
   updateFieldVisuals();
   updateUI();
   startTimer();
   setInterval(checkEmbargo, 1000); // Проверка блокировок каждую секунду
+  console.log('✅ ИГРА НАЧАТА!');
 }
 
 // 3. Создание сетки 9х9
@@ -119,13 +134,34 @@ function generateFleet(config) {
   return fleet;
 }
 
-// 5. Выстрел и Эмбарго
+// 5. Выстрел
 function makeShot(targetTeam, idx) {
   const cellId = `t${targetTeam}-c${idx}`;
-  if (isProcessing || activeTeam === targetTeam || isEmbargoed(cellId)) return;
+  console.log(
+    `🎯 ВЫСТРЕЛ по клетке ${cellId} (команда ${activeTeam} стреляет в команду ${targetTeam})`,
+  );
+
+  // Проверяем эмбарго перед тем как открывать модалку
+  if (isEmbargoed(cellId)) {
+    console.log(`⛔ Клетка ${cellId} заблокирована ЭМБАРГО!`);
+    showEmbargoTimer(cellId);
+    return;
+  }
+
+  if (isProcessing) {
+    console.log('⚠️ Уже идёт обработка хода');
+    return;
+  }
+  if (activeTeam === targetTeam) {
+    console.log('⚠️ Нельзя стрелять по своему полю!');
+    return;
+  }
 
   const cell = document.getElementById(cellId);
-  if (cell.classList.contains('revealed')) return;
+  if (cell.classList.contains('revealed')) {
+    console.log(`⚠️ Клетка ${cellId} уже была раскрыта`);
+    return;
+  }
 
   isProcessing = true;
   window.currentShot = { targetTeam, idx };
@@ -139,52 +175,46 @@ function makeShot(targetTeam, idx) {
   currentQuestionData = available[Math.floor(Math.random() * available.length)];
   usedQuestions.add(currentQuestionData.id);
 
+  // Отображение ID вопроса
+  document.getElementById('question-id').innerText = currentQuestionData.id;
+
+  // Вопрос
   document.getElementById('q-text').innerText = currentQuestionData.q;
   document.getElementById('answer-box').innerText = 'ОТВЕТ: ' + currentQuestionData.a;
 
   // Сброс модалки
+  selectedAnswer = null;
   document.getElementById('options-box').style.display = 'none';
-  document.getElementById('btn-options').style.display = 'block';
+  document.getElementById('options-list').innerHTML = '';
   document.getElementById('answer-box').style.display = 'none';
-  document.getElementById('btn-reveal').style.display = 'block';
-  document.getElementById('btn-y').disabled = document.getElementById('btn-n').disabled = true;
+  document.getElementById('btn-options').style.display = 'block';
+  // Восстанавливаем видимость кнопки ПОКАЗАТЬ ОТВЕТ и скрываем ручную оценку
+  const btnReveal = document.getElementById('btn-reveal');
+  if (btnReveal) btnReveal.style.display = 'block';
+  const revealJudgement = document.getElementById('reveal-judgement');
+  if (revealJudgement) revealJudgement.style.display = 'none';
+  document.getElementById('btn-check').disabled = true;
   document.getElementById('modal').style.display = 'flex';
 }
 
-function handleResult(isCorrect) {
-  const { targetTeam, idx } = window.currentShot;
-  const cell = document.getElementById(`t${targetTeam}-c${idx}`);
-  const ship = ships[targetTeam].find((s) => s.coords.includes(idx));
-
-  cell.classList.add('revealed');
-  let points = isCorrect ? 10 : -5;
-
-  if (isCorrect) {
-    if (ship) {
-      ship.hits++;
-      points += 10;
-      cell.classList.add('hit');
-      if (ship.hits === ship.coords.length) {
-        ship.sunk = true;
-        points += 15;
-        markSunk(targetTeam, ship);
-      }
-    } else {
-      cell.classList.add('miss');
-    }
-  } else {
-    cell.classList.add('error');
-    setEmbargo(`t${targetTeam}-c${idx}`);
+function checkAnswer() {
+  if (!selectedAnswer || !currentQuestionData) {
+    console.warn('⚠️ Выберите вариант ответа!');
+    return;
   }
+  console.log(
+    `🔍 Проверка ответа: выбран "${selectedAnswer}", правильный: "${currentQuestionData.a}"`,
+  );
 
-  scores[activeTeam] += points;
-  saveGameState();
-  updateUI();
-  setTimeout(() => {
-    document.getElementById('modal').style.display = 'none';
-    isProcessing = false;
-    switchTurn();
-  }, 2000);
+  // Сравниваем выбранный ответ с правильным
+  const isCorrect =
+    selectedAnswer.trim().toLowerCase() === currentQuestionData.a.trim().toLowerCase();
+
+  console.log(`${isCorrect ? '✅ ВЕРНЫЙ' : '❌ НЕВЕРНЫЙ'} ОТВЕТ!`);
+
+  document.getElementById('btn-check').disabled = true;
+  // Используем общую обработку результата
+  resolveShot(isCorrect);
 }
 
 function markSunk(team, ship) {
@@ -208,104 +238,219 @@ function startTimer() {
 }
 
 function setEmbargo(cellId) {
-  embargoList[cellId] = Date.now() + 5 * 60 * 1000;
+  console.log(`🚫 ЭМБАРГО установлено на клетку ${cellId} на 5 минут`);
+  embargoList[cellId] = Date.now() + 5 * 60 * 1000; // 5 минут
+  clearTimeout(embargoTimers[cellId]);
+
+  // Показываем модальное окно эмбарго сразу
+  showEmbargoModal(cellId);
+}
+
+function showEmbargoModal(cellId) {
+  const embargoModal = document.getElementById('embargo-modal');
+  const embargoTimer = document.getElementById('embargo-timer');
+
+  embargoModal.style.display = 'flex';
+
+  const updateEmbargoDisplay = () => {
+    const remaining = Math.max(0, embargoList[cellId] - Date.now());
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    embargoTimer.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+    if (remaining <= 0) {
+      embargoModal.style.display = 'none';
+      delete embargoTimers[cellId];
+    } else {
+      embargoTimers[cellId] = setTimeout(updateEmbargoDisplay, 1000);
+    }
+  };
+
+  updateEmbargoDisplay();
+
+  // Закрыть модалку автоматически через 5 секунд
+  setTimeout(() => {
+    embargoModal.style.display = 'none';
+  }, 5000);
 }
 
 function isEmbargoed(cellId) {
-  return embargoList[cellId] && Date.now() < embargoList[cellId];
+  if (!embargoList[cellId]) return false;
+
+  const remaining = embargoList[cellId] - Date.now();
+  if (remaining <= 0) {
+    delete embargoList[cellId];
+    return false;
+  }
+
+  // Если попытались нажать на заблокированную клетку - показываем модалку
+  return true;
+}
+
+// Показать таймер эмбарго при попытке нажать на заблокированную клетку
+function showEmbargoTimer(cellId) {
+  if (!embargoList[cellId]) return;
+
+  const embargo = document.getElementById('embargo-modal');
+  embargo.style.display = 'flex';
+
+  const updateTimer = () => {
+    const remaining = Math.max(0, embargoList[cellId] - Date.now());
+    if (remaining <= 0) {
+      embargo.style.display = 'none';
+      delete embargoList[cellId];
+      document.getElementById(cellId)?.classList.remove('embargo');
+      return;
+    }
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    document.getElementById('embargo-timer').innerText =
+      `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    setTimeout(updateTimer, 1000);
+  };
+
+  updateTimer();
 }
 
 function checkEmbargo() {
   for (let id in embargoList) {
     const cell = document.getElementById(id);
-    if (Date.now() < embargoList[id]) {
+    if (cell && Date.now() < embargoList[id]) {
       cell.classList.add('embargo');
-    } else {
+    } else if (cell) {
       cell.classList.remove('embargo');
-      delete embargoList[id];
     }
   }
 }
 
 function saveGameState() {
   const data = { scores, ships, activeTeam, usedQuestions: Array.from(usedQuestions), embargoList };
-  localStorage.setItem('navy_battle_save', JSON.stringify(data));
-}
-
-function loadGameState() {
-  const saved = localStorage.getItem('navy_battle_save');
-  if (saved) {
-    const data = JSON.parse(saved);
-    scores = data.scores;
-    ships = data.ships;
-    activeTeam = data.activeTeam;
-    usedQuestions = new Set(data.usedQuestions);
-    embargoList = data.embargoList;
+  // Сохраняем в localStorage
+  try {
+    localStorage.setItem('navy_battle_save', JSON.stringify(data));
+  } catch (e) {
+    console.warn('localStorage write failed', e);
+  }
+  // Сохраняем в cookie (на 7 дней)
+  try {
+    const v = encodeURIComponent(JSON.stringify(data));
+    const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `navy_battle_save=${v}; expires=${exp}; path=/`;
+  } catch (e) {
+    console.warn('cookie write failed', e);
   }
 }
 
+function loadGameState() {
+  // Сначала пробуем localStorage
+  let saved = null;
+  try {
+    saved = localStorage.getItem('navy_battle_save');
+  } catch (e) {
+    console.warn('localStorage read failed', e);
+  }
+  // Если нет, пробуем cookie
+  if (!saved) {
+    const m = document.cookie.match(/(?:^|; )navy_battle_save=([^;]+)/);
+    if (m) {
+      try {
+        saved = decodeURIComponent(m[1]);
+      } catch (e) {
+        console.warn('cookie decode failed', e);
+      }
+    }
+  }
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      scores = data.scores || scores;
+      ships = data.ships || ships;
+      activeTeam = data.activeTeam || activeTeam;
+      usedQuestions = new Set(data.usedQuestions || []);
+      embargoList = data.embargoList || {};
+    } catch (e) {
+      console.warn('Failed to parse saved state', e);
+    }
+  }
+}
+
+function clearSavedState() {
+  try {
+    localStorage.removeItem('navy_battle_save');
+  } catch (e) {
+    console.warn('localStorage clear failed', e);
+  }
+  try {
+    // Удаляем cookie, установив истёкшую дату
+    document.cookie = 'navy_battle_save=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  } catch (e) {
+    console.warn('cookie clear failed', e);
+  }
+  console.log('🧹 Сохранение игры очищено (кэш очищен)');
+}
+
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (БЕЗ ИЗМЕНЕНИЙ) ---
+
 function showOptions() {
-  if (!currentQuestionData) return;
+  if (!currentQuestionData) {
+    console.warn('⚠️ Нет текущего вопроса');
+    return;
+  }
+  console.log(`📋 Показываем варианты ответа для вопроса ID=${currentQuestionData.id}`);
 
   const optBox = document.getElementById('options-box');
+  const optList = document.getElementById('options-list');
   const letters = ['А', 'Б', 'В', 'Г', 'Д'];
 
-  let txt = 'ВАРИАНТЫ:\n';
+  // Создаем кнопки для каждого варианта
+  let html = '';
   currentQuestionData.options.forEach((opt, i) => {
     if (opt && opt !== '') {
-      txt += `${letters[i]}) ${opt}   `;
+      html += `<button class="btn btn-option" onclick="selectAnswer('${opt.replace(/'/g, "\\'")}')"
+        style="
+          background: #424242; color: white; padding: 12px; text-align: left; border-radius: 8px;
+          cursor: pointer; transition: 0.3s; border: none; font-size: 14px; width: 100%;
+          font-family: 'Segoe UI', sans-serif; font-weight: bold;
+        ">
+        <strong>${letters[i]})</strong> ${opt}
+      </button>`;
     }
   });
 
-  optBox.innerText = txt;
+  optList.innerHTML = html;
   optBox.style.display = 'block';
   document.getElementById('btn-options').style.display = 'none';
+  // Скрываем judgement кнопки если были показаны
+  const revealJudgement = document.getElementById('reveal-judgement');
+  if (revealJudgement) revealJudgement.style.display = 'none';
 
   scores[activeTeam] -= 5;
+  console.log(`💸 Отнято 5 очков за показ вариантов. Баллы: ${scores[activeTeam]}`);
   showPointAnim(-5);
+  saveGameState();
   updateUI();
 }
 
-function makeShot(targetTeam, idx) {
-  if (
-    isProcessing ||
-    (activeTeam === 1 && targetTeam !== 2) ||
-    (activeTeam === 2 && targetTeam !== 1)
-  )
-    return;
-  const cell = document.getElementById(`t${targetTeam}-c${idx}`);
-  if (cell.classList.contains('revealed')) return;
-
-  isProcessing = true;
-  clearInterval(timerId);
-  window.currentShot = { targetTeam, idx };
-
-  // Выбираем случайный вопрос
-  currentQuestionData = DATABASE[Math.floor(Math.random() * DATABASE.length)];
-
-  document.getElementById('q-text').innerText = currentQuestionData.q;
-  document.getElementById('answer-box').innerText = 'ОТВЕТ: ' + currentQuestionData.a;
-
-  // Сброс окон
-  document.getElementById('options-box').style.display = 'none';
-  document.getElementById('btn-options').style.display = 'block';
-  document.getElementById('answer-box').style.display = 'none';
-  document.getElementById('btn-reveal').style.display = 'block';
-  document.getElementById('btn-y').disabled = document.getElementById('btn-n').disabled = true;
-  document.getElementById('modal').style.display = 'flex';
+// Обработка ручной оценки при показе ответа (ВЕРНО / НЕВЕРНО)
+function handleReveal(isCorrect) {
+  console.log(`🧾 Ручная проверка: ${isCorrect ? 'ВЕРНО' : 'НЕВЕРНО'}`);
+  // Скрываем judgement кнопки
+  const revealJudgement = document.getElementById('reveal-judgement');
+  if (revealJudgement) revealJudgement.style.display = 'none';
+  // Перейти к стандартной обработке результата
+  resolveShot(isCorrect);
 }
 
-function handleResult(isCorrect) {
-  document.getElementById('btn-y').disabled = true;
-  document.getElementById('btn-n').disabled = true;
-
-  const { targetTeam, idx } = window.currentShot;
+// Универсальная логика обработки попадания/ошибки
+function resolveShot(isCorrect) {
+  const { targetTeam, idx } = window.currentShot || {};
+  if (typeof targetTeam === 'undefined') return;
   const cell = document.getElementById(`t${targetTeam}-c${idx}`);
   const ship = ships[targetTeam].find((s) => s.coords.includes(idx));
   const imgElement = document.getElementById('explosion-gif');
   const placeholder = document.getElementById('media-placeholder');
 
-  cell.classList.add('revealed');
+  if (cell) cell.classList.add('revealed');
   let p = isCorrect ? 10 : -5;
 
   if (isCorrect) {
@@ -318,6 +463,8 @@ function handleResult(isCorrect) {
 
       if (ship.hits === ship.coords.length) {
         p += 15;
+        ship.sunk = true;
+        markSunk(targetTeam, ship);
         document.getElementById('m-header').innerText = 'КОРАБЛЬ УНИЧТОЖЕН! (+35)';
         if (document.getElementById('snd-hit')) document.getElementById('snd-hit').play();
         const randomSink = SINK_OPTIONS[Math.floor(Math.random() * SINK_OPTIONS.length)];
@@ -328,20 +475,26 @@ function handleResult(isCorrect) {
         imgElement.src = GIFS_HIT[Math.floor(Math.random() * GIFS_HIT.length)];
       }
     } else {
-      cell.classList.add('miss');
-      cell.innerText = '•';
-      document.getElementById('m-header').innerText = 'МИМО! (Верно)';
+      if (cell) cell.classList.add('miss');
+      if (cell) cell.innerText = '•';
+      document.getElementById('m-header').innerText = 'МИМО! (Верно +10)';
       if (document.getElementById('snd-shot')) document.getElementById('snd-shot').play();
       imgElement.src = GIF_MISS;
       placeholder.style.display = 'block';
     }
   } else {
-    cell.innerText = '❌';
+    if (cell) cell.innerText = '❌';
+    if (cell) cell.classList.add('error');
     document.getElementById('m-header').innerText = 'ОШИБКА! (-5)';
+    setEmbargo(`t${targetTeam}-c${idx}`);
   }
 
   scores[activeTeam] += p;
+  console.log(
+    `💰 ${p >= 0 ? '+' : ''}${p} очков. Всего у ФЛОТА ${activeTeam}: ${scores[activeTeam]}`,
+  );
   showPointAnim(p);
+  saveGameState();
   updateUI();
 
   const enemyTeam = activeTeam === 1 ? 2 : 1;
@@ -354,7 +507,35 @@ function handleResult(isCorrect) {
   }
 }
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (БЕЗ ИЗМЕНЕНИЙ) ---
+function selectAnswer(answer) {
+  console.log(`📢 Выбран вариант ответа: "${answer}"`);
+  selectedAnswer = answer;
+  document.getElementById('btn-check').disabled = false;
+  console.log('✅ Кнопка ПРОВЕРИТЬ ОТВЕТ активирована');
+}
+
+function showAnswer() {
+  if (!currentQuestionData) {
+    console.warn('⚠️ Нет текущего вопроса');
+    return;
+  }
+  console.log(`📝 Показываем ответ: "${currentQuestionData.a}"`);
+  const answerBox = document.getElementById('answer-box');
+  answerBox.innerText = 'ОТВЕТ: ' + currentQuestionData.a;
+  answerBox.style.display = 'block';
+
+  // Показать кнопки ВЕРНО/НЕВЕРНО и скрыть другие
+  const revealBtn = document.getElementById('btn-reveal');
+  const optionsBtn = document.getElementById('btn-options');
+  const revealJudgement = document.getElementById('reveal-judgement');
+  if (revealBtn) revealBtn.style.display = 'none';
+  if (optionsBtn) optionsBtn.style.display = 'none';
+  if (revealJudgement) revealJudgement.style.display = 'flex';
+  // Отключаем кнопку проверки мн. выборов
+  const btnCheck = document.getElementById('btn-check');
+  if (btnCheck) btnCheck.disabled = true;
+  console.log('✅ Ответ отображён; показаны кнопки ВЕРНО/НЕВЕРНО');
+}
 
 function showPointAnim(val) {
   const header = document.getElementById('m-header');
@@ -374,71 +555,12 @@ function finishMove() {
   switchTurn();
 }
 
-function createGrid(id, teamNum) {
-  const grid = document.getElementById(id);
-  const letters = ['А', 'Б', 'В', 'Г', 'Д', 'Е','Ё', 'Ж', 'З'];
-  grid.innerHTML = '<div></div>';
-  letters.forEach((l) => {
-    const d = document.createElement('div');
-    d.className = 'label';
-    d.innerText = l;
-    grid.appendChild(d);
-  });
-  for (let r = 1; r <= 9; r++) {
-    const l = document.createElement('div');
-    l.className = 'label';
-    l.innerText = r;
-    grid.appendChild(l);
-    for (let c = 0; c < 9; c++) {
-      const idx = (r - 1) * 9 + c;
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.id = `t${teamNum}-c${idx}`;
-      cell.onclick = () => makeShot(teamNum, idx);
-      grid.appendChild(cell);
-    }
-  }
-}
-
-function generateFleet() {
-  let fleet = [];
-  [4, 3, 3, 2, 2, 1, 1].forEach((size) => {
-    let placed = false;
-    while (!placed) {
-      let isVert = Math.random() > 0.5,
-        r = Math.floor(Math.random() * 8),
-        c = Math.floor(Math.random() * 8);
-      let coords = [];
-      for (let i = 0; i < size; i++) {
-        let rr = isVert ? r + i : r,
-          cc = isVert ? c : c + i;
-        if (rr < 8 && cc < 8) coords.push(rr * 8 + cc);
-      }
-      let allBusy = fleet.flatMap((s) => s.coords);
-      if (coords.length === size && coords.every((idx) => !allBusy.includes(idx))) {
-        fleet.push({ coords, hits: 0 });
-        placed = true;
-      }
-    }
-  });
-  return fleet;
-}
-
-function startTimer() {
-  clearInterval(timerId);
-  timeLeft = 120;
-  timerId = setInterval(() => {
-    timeLeft--;
-    const display = document.getElementById('timer');
-    const m = Math.floor(timeLeft / 60),
-      s = timeLeft % 60;
-    display.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
-    if (timeLeft <= 0) switchTurn();
-  }, 1000);
-}
-
 function switchTurn() {
   activeTeam = activeTeam === 1 ? 2 : 1;
+  console.log(
+    `🔄 Смена хода! Теперь ходит: ФЛОТ ${activeTeam === 1 ? 'СИНИЙ' : 'КРАСНЫЙ'} (${activeTeam})`,
+  );
+  console.log(`📊 Баллы - СИНИЙ: ${scores[1]}, КРАСНЫЙ: ${scores[2]}`);
   updateFieldVisuals();
   startTimer();
 }
@@ -457,21 +579,24 @@ function updateUI() {
   document.getElementById('s2').innerText = scores[2];
 }
 
-function revealAnswer() {
-  document.getElementById('answer-box').style.display = 'block';
-  document.getElementById('btn-reveal').style.display = 'none';
-  document.getElementById('btn-options').style.display = 'none';
-  document.getElementById('btn-y').disabled = document.getElementById('btn-n').disabled = false;
-}
-
 function endGame() {
   clearInterval(timerId);
+  console.log('🏁 КОНЕЦ ИГРЫ!');
+  console.log(`📊 ФИНАЛЬНЫЕ БАЛЛЫ - СИНИЙ ФЛОТ: ${scores[1]}, КРАСНЫЙ ФЛОТ: ${scores[2]}`);
   const modal = document.getElementById('finish-modal');
   modal.style.display = 'flex';
   document.getElementById('final-s1').innerText = scores[1];
   document.getElementById('final-s2').innerText = scores[2];
-  document.getElementById('winner-title').innerText =
-    scores[1] > scores[2] ? 'СИНИЕ ПОБЕДИЛИ!' : 'КРАСНЫЕ ПОБЕДИЛИ!';
+  const winner =
+    scores[1] > scores[2]
+      ? 'СИНИЕ ПОБЕДИЛИ!'
+      : scores[2] > scores[1]
+        ? 'КРАСНЫЕ ПОБЕДИЛИ!'
+        : 'НИЧЬЯ!';
+  console.log(`🏆 ${winner}`);
+  document.getElementById('winner-title').innerText = winner;
+  // При завершении сражения очищаем кэш, чтобы при перезагрузке игра начиналась сначала.
+  clearSavedState();
 }
 
 window.onload = init;
