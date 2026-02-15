@@ -23,6 +23,9 @@ const SINK_OPTIONS = [
   'media/тонет.jpg',
   'https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHJueGZ4bmZ4bmZ4bmZ4bmZ4bmZ4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/XUFPGrX5Zis6Y/giphy.gif',
 ];
+const ICON_COMPASS = 'media/compass.png';
+const ICON_TELESCOPE = 'media/подзорная_труба.png';
+const SOUND_SINK = 'media/крушение.mp3';
 
 // 1. Загрузка CSV (с учетом твоего нового формата: id;q;img;ans;opt1...)
 async function loadQuestions() {
@@ -541,9 +544,9 @@ function showOptions() {
         style="
           background: #424242; color: white; padding: 12px; text-align: left; border-radius: 8px;
           cursor: pointer; transition: 0.3s; border: none; font-size: 14px; width: 100%;
-          font-family: 'Segoe UI', sans-serif; font-weight: bold;
+          font-family: 'Segoe UI', sans-serif; font-weight: bold; display: flex; align-items: center; gap: 8px;
         ">
-        <span style='margin-right:8px'>🧭</span><strong>${letters[i]})</strong> ${opt}
+        <img src="${ICON_COMPASS}" alt="🧭" style="width:16px; height:16px;"><strong>${letters[i]})</strong> ${opt}
       </button>`;
     }
   });
@@ -602,7 +605,12 @@ function resolveShot(isCorrect) {
         // Отметим все клетки корабля как потопленные в кеше
         ship.coords.forEach((ci) => (revealedCells[`t${targetTeam}-c${ci}`] = 'sunk'));
         document.getElementById('m-header').innerText = 'КОРАБЛЬ УНИЧТОЖЕН! (+35)';
-        if (document.getElementById('snd-hit')) document.getElementById('snd-hit').play();
+        // Воспроизводим новый звук потопления
+        if (document.getElementById('snd-sink')) {
+          document.getElementById('snd-sink').play();
+        } else if (document.getElementById('snd-hit')) {
+          document.getElementById('snd-hit').play();
+        }
         const randomSink = SINK_OPTIONS[Math.floor(Math.random() * SINK_OPTIONS.length)];
         imgElement.src = randomSink + '?t=' + Math.random();
       } else {
