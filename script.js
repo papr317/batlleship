@@ -11,6 +11,7 @@ let embargoList = {};
 let embargoTimers = {};
 let selectedAnswer = null; // Для отслеживания выбранного варианта
 let revealedCells = {}; // { 't1-c5': 'hit'|'miss'|'error'|'sunk' }
+let modalTimeExpiredHandled = false;
 const GRID_SIZE = 9;
 const LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ё', 'Ж', 'З'];
 const SHIP_CONFIG = [5, 4, 3, 3, 2];
@@ -185,6 +186,18 @@ function makeShot(targetTeam, idx) {
 
   // Отображение ID вопроса
   document.getElementById('question-id').innerText = currentQuestionData.id;
+  // Логируем ID вопроса и оставшееся время при выстреле
+  console.log(`🆔 Вопрос ID=${currentQuestionData.id}`);
+  console.log(
+    `⏱️ Оставшееся время хода: ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`,
+  );
+  // Сброс флага обработки истечения времени для новой модалки
+  modalTimeExpiredHandled = false;
+  // Сброс подсказки (включаем кнопку и прячем блок подсказки)
+  const hintBox = document.getElementById('hint-box');
+  const hintBtn = document.getElementById('btn-hint');
+  if (hintBox) hintBox.style.display = 'none';
+  if (hintBtn) hintBtn.disabled = false;
 
   // Вопрос
   document.getElementById('q-text').innerText = currentQuestionData.q;
@@ -245,23 +258,37 @@ function startTimer() {
     timeLeft--;
     document.getElementById('timer').innerText =
       `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
-    // Если открыта модалка вопроса — синхронизируем её таймер
+    // Если открыта модалка вопроса — синхронизируем её таймер и обрабатываем окончание
     const modal = document.getElementById('modal');
     if (modal && modal.style.display === 'flex') {
       const mt = document.getElementById('modal-timer');
       if (mt)
         mt.innerText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
-    }
-    if (timeLeft <= 0) {
-      // Если модалка открыта, закрываем её при окончании времени
-      const modal = document.getElementById('modal');
-      if (modal && modal.style.display === 'flex') {
-        modal.style.display = 'none';
-        document.getElementById('media-placeholder').style.display = 'none';
-        document.getElementById('m-header').innerText = 'ОГНЕВОЙ КОНТАКТ';
-        isProcessing = false;
+      if (timeLeft <= 0 && !modalTimeExpiredHandled) {
+        modalTimeExpiredHandled = true;
+        // Сообщение пользователю и логирование ID примера
+        document.getElementById('m-header').innerText = '⏱️ ВРЕМЯ ИСТЕКЛО';
+        if (currentQuestionData && currentQuestionData.id) {
+          console.log(`⏱️ Время истекло для вопроса ID=${currentQuestionData.id}`);
+        } else {
+          console.log('⏱️ Время истекло (вопрос не определён)');
+        }
+        // Показываем подсказку/ответ в модалке (если нужно) и затем закрываем через 2s
+        const answerBox = document.getElementById('answer-box');
+        if (answerBox && currentQuestionData) {
+          answerBox.innerText = 'ВРЕМЯ ИСТЕКЛО. ОТВЕТ: ' + currentQuestionData.a;
+          answerBox.style.display = 'block';
+        }
+        setTimeout(() => {
+          modal.style.display = 'none';
+          document.getElementById('media-placeholder').style.display = 'none';
+          document.getElementById('m-header').innerText = 'ОГНЕВОЙ КОНТАКТ';
+          isProcessing = false;
+          switchTurn();
+        }, 2000);
       }
-      switchTurn();
+    } else {
+      if (timeLeft <= 0) switchTurn();
     }
   }, 1000);
 }
@@ -330,6 +357,11 @@ function startEmbargoTimer(cellId) {
       delete embargoList[cellId];
       if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
       cell.classList.remove('embargo');
+      // Когда эмбарго окончено — делаем клетку снова активной для нового вопроса.
+      cell.classList.remove('revealed', 'error', 'hit', 'miss', 'sunk');
+      cell.innerText = '';
+      // Удаляем запись об этой клетке в revealedCells, чтобы при следующем клике выбрался новый вопрос
+      delete revealedCells[cellId];
       saveGameState();
       return;
     }
@@ -667,6 +699,29 @@ function showAnswer() {
   console.log('✅ Ответ отображён; показаны кнопки ВЕРНО/НЕВЕРНО');
 }
 
+function useHint() {
+  if (!currentQuestionData) {
+    console.warn('⚠️ Нет текущего вопроса для подсказки');
+    return;
+  }
+  const hintBox = document.getElementById('hint-box');
+  const btn = document.getElementById('btn-hint');
+  if (!hintBox || !btn) return;
+  if (hintBox.style.display === 'block') return; // уже использована
+
+  const hint = currentQuestionData.hint || 'Подсказка отсутствует';
+  hintBox.innerText = 'ПОДСКАЗКА: ' + hint;
+  hintBox.style.display = 'block';
+
+  // Снимаем 2.5 очка
+  scores[activeTeam] = (scores[activeTeam] || 0) - 2.5;
+  console.log(`💡 Подсказка показана. -2.5 очка. Баллы: ${scores[activeTeam]}`);
+  btn.disabled = true;
+  showPointAnim(-2.5);
+  saveGameState();
+  updateUI();
+}
+
 function showPointAnim(val) {
   const header = document.getElementById('m-header');
   const color = val > 0 ? '#b2ff59' : '#ff5252';
@@ -707,8 +762,9 @@ function updateFieldVisuals() {
 }
 
 function updateUI() {
-  document.getElementById('s1').innerText = scores[1];
-  document.getElementById('s2').innerText = scores[2];
+  const fmt = (v) => (Math.abs(v - Math.round(v)) < 0.0001 ? String(Math.round(v)) : v.toFixed(1));
+  document.getElementById('s1').innerText = fmt(scores[1] || 0);
+  document.getElementById('s2').innerText = fmt(scores[2] || 0);
 }
 
 function endGame() {
