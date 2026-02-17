@@ -30,6 +30,38 @@ const ICON_COMPASS = 'media/compass.png';
 const ICON_TELESCOPE = 'media/подзорная_труба.png';
 const SOUND_SINK = 'media/крушение.mp3';
 
+// Функция для воспроизведения фонового звука
+function playBackgroundMusic() {
+  const bgMusic = document.getElementById('bg-music');
+  if (bgMusic) {
+    bgMusic.volume = 0.3; // Устанавливаем громкость на 30%, чтобы не мешал
+    bgMusic.play().catch((e) => {
+      console.warn('⚠️ Не удалось воспроизвести фоновый звук:', e);
+    });
+  }
+}
+
+// Функция для воспроизведения звука потопления с ограничением до 2 секунд
+function playSinkSound() {
+  const sinkSound = document.getElementById('snd-sink');
+  if (sinkSound) {
+    try {
+      sinkSound.currentTime = 0; // Начинаем с начала
+      sinkSound.play();
+
+      // Останавливаем звук через 2 секунды
+      setTimeout(() => {
+        if (sinkSound && !sinkSound.paused) {
+          sinkSound.pause();
+          sinkSound.currentTime = 0;
+        }
+      }, 2000);
+    } catch (e) {
+      console.warn('⚠️ Ошибка при воспроизведении звука потопления:', e);
+    }
+  }
+}
+
 // 1. Загрузка CSV (с учетом твоего нового формата: id;q;img;ans;opt1...)
 async function loadQuestions() {
   try {
@@ -88,6 +120,7 @@ async function init() {
   updateUI();
   startTimer();
   startGameTimer(); // Запуск таймера на 30 минут для всей игры
+  playBackgroundMusic(); // Запуск фонового звука
   setInterval(checkEmbargo, 1000); // Проверка блокировок каждую секунду
   console.log('✅ ИГРА НАЧАТА!');
 }
@@ -337,8 +370,10 @@ function endGameByTime() {
   console.log('🎉 ВРЕМЯ ИГРЫ ИСТЕКЛО!');
   console.log(`📊 ФИНАЛЬНЫЕ БАЛЛЫ - СИНИЙ ФЛОТ: ${scores[1]}, КРАСНЫЙ ФЛОТ: ${scores[2]}`);
 
-  // Останавливаем основной таймер
+  // Останавливаем основной таймер и фоновую музыку
   clearInterval(timerId);
+  const bgMusic = document.getElementById('bg-music');
+  if (bgMusic) bgMusic.pause();
 
   // Отображаем финальные очки в модальном окне
   document.getElementById('game-over-s1').innerText = scores[1];
@@ -687,12 +722,8 @@ function resolveShot(isCorrect) {
         // Отметим все клетки корабля как потопленные в кеше
         ship.coords.forEach((ci) => (revealedCells[`t${targetTeam}-c${ci}`] = 'sunk'));
         document.getElementById('m-header').innerText = 'КОРАБЛЬ УНИЧТОЖЕН! (+35)';
-        // Воспроизводим новый звук потопления
-        if (document.getElementById('snd-sink')) {
-          document.getElementById('snd-sink').play();
-        } else if (document.getElementById('snd-hit')) {
-          document.getElementById('snd-hit').play();
-        }
+        // Воспроизводим новый звук потопления (ограничен до 2 секунд)
+        playSinkSound();
         const randomSink = SINK_OPTIONS[Math.floor(Math.random() * SINK_OPTIONS.length)];
         imgElement.src = randomSink + '?t=' + Math.random();
       } else {
@@ -836,6 +867,8 @@ function updateUI() {
 function endGame() {
   clearInterval(timerId);
   clearInterval(gameTimerId); // Останавливаем таймер игры
+  const bgMusic = document.getElementById('bg-music');
+  if (bgMusic) bgMusic.pause(); // Останавливаем фоновую музыку
   console.log('🏁 КОНЕЦ ИГРЫ!');
   console.log(`📊 ФИНАЛЬНЫЕ БАЛЛЫ - СИНИЙ ФЛОТ: ${scores[1]}, КРАСНЫЙ ФЛОТ: ${scores[2]}`);
   const modal = document.getElementById('finish-modal');
