@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <!-- Видео оставляем только на стартовой странице (start.html) -->
+
+    <audio id="bg-music-game" loop>
+      <source src="media/fon.mp3" type="audio/mpeg" />
+    </audio>
+
     <div class="header">
       <h1>МОРСКОЙ БОЙ:</h1>
     </div>
@@ -274,7 +280,14 @@
     <audio id="snd-shot" src="media/воду.mp3" preload="auto"></audio>
     <audio id="snd-hit" src="media/попадание.mp3" preload="auto"></audio>
     <audio id="snd-sink" src="media/крушение.mp3" preload="auto"></audio>
-    <audio id="bg-music" src="media/fon.mp3" loop autoplay preload="auto" style="display: none"></audio>
+    <audio
+      id="bg-music"
+      src="media/fon.mp3"
+      loop
+      autoplay
+      preload="auto"
+      style="display: none"
+    ></audio>
     <script src="script.js"></script>
   </body>
 </html>

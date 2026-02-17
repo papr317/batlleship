@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Морской Бой: Старт</title>
+    <link rel="shortcut icon" href="media/facion.png" type="image/x-icon" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="start-page">
+    <video autoplay muted loop playbackrate="0.5" class="start-video" style="animation: none">
+      <source src="media/downloaded-file.mp4" type="video/mp4" />
+    </video>
+
+    <audio id="bg-music" loop>
+      <source src="media/fon.mp3" type="audio/mpeg" />
+    </audio>
+
+    <div class="start-container">
+      <div class="start-card">
+        <h1 class="start-title">МОРСКОЙ БОЙ</h1>
+        <p class="start-subtitle">математика и информатика</p>
+
+        <div class="start-divider"></div>
+
+        <div class="game-mode-section">
+          <h2 style="margin-bottom: 30px; font-size: 28px; color: #ffd700">ВЫБЕРИТЕ РЕЖИМ ИГРЫ:</h2>
+
+          <button class="start-btn start-btn-primary" onclick="startGame2Teams()">
+            👥 ДВА ИГРОКА
+          </button>
+
+          <button
+            class="start-btn start-btn-secondary"
+            onclick="startGameSingle()"
+            disabled
+            title="Режим недоступен"
+          >
+            👤 ЛИЧНАЯ ИГРА
+          </button>
+        </div>
+
+        <div class="start-divider"></div>
+
+        <div class="team-select-section" id="team-select-section" style="display: none">
+          <h3 style="margin-bottom: 20px; color: #ffd700">С КАКОЙ КОМАНДЫ НАЧИНАТЬ?</h3>
+          <div class="team-buttons">
+            <button class="team-btn team-btn-blue" onclick="selectStartTeam(1)">
+              <span style="font-size: 24px">🔵</span> СИНИЙ ФЛОТ
+            </button>
+            <button class="team-btn team-btn-red" onclick="selectStartTeam(2)">
+              <span style="font-size: 24px">🔴</span> КРАСНЫЙ ФЛОТ
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модальное окно для выбора Продолжить/Заново -->
+    <div
+      id="continue-modal"
+      class="modal-overlay"
+      style="display: none; z-index: 3000; background: rgba(0, 0, 0, 0.9)"
+    >
+      <div
+        class="modal-content"
+        style="
+          max-width: 500px;
+          background: #f4e4bc;
+          color: #2c3e50;
+          padding: 40px;
+          border-radius: 20px;
+          border: 8px solid #3e2723;
+          box-shadow: 0 0 50px #000;
+          position: relative;
+        "
+      >
+        <h2 style="color: #ffd700; margin: 0 0 30px 0; font-size: 28px; text-align: center">
+          🎮 Обнаружена сохраненная игра
+        </h2>
+        <p style="font-size: 18px; margin-bottom: 30px; text-align: center; color: #2c3e50">
+          Вы хотите продолжить игру или начать заново?
+        </p>
+        <div style="display: flex; gap: 15px">
+          <button
+            class="btn btn-show"
+            onclick="continuePreviousGame()"
+            style="
+              flex: 1;
+              background: #2e7d32;
+              font-size: 16px;
+              color: white;
+              padding: 12px 25px;
+              cursor: pointer;
+              font-weight: bold;
+              border-radius: 30px;
+              text-transform: uppercase;
+              border: none;
+              width: auto;
+            "
+          >
+            📖 ПРОДОЛЖИТЬ
+          </button>
+          <button
+            class="btn btn-show"
+            onclick="startNewGame()"
+            style="
+              flex: 1;
+              background: #c62828;
+              font-size: 16px;
+              color: white;
+              padding: 12px 25px;
+              cursor: pointer;
+              font-weight: bold;
+              border-radius: 30px;
+              text-transform: uppercase;
+              border: none;
+              width: auto;
+            "
+          >
+            🔄 ЗАНОВО
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Управление скоростью видео и музыкой
+      window.addEventListener('load', () => {
+        const video = document.querySelector('.start-video');
+        const bgMusic = document.getElementById('bg-music');
+
+        // Замедляем видео в 2 раза
+        if (video) {
+          video.playbackRate = 0.5;
+          console.log('📹 Видео замедлено в 2 раза');
+        }
+
+        // Воспроизводим фоновую музыку
+        if (bgMusic) {
+          bgMusic.volume = 0.3; // 30% громкости
+          bgMusic.play().catch((e) => console.log('Auto-play блокирован:', e));
+        }
+
+        // Проверяем наличие сохраненной игры
+        checkForSavedGame();
+      });
+
+      // Разрешить автоплей при клике
+      document.addEventListener('click', () => {
+        const bgMusic = document.getElementById('bg-music');
+        if (bgMusic && bgMusic.paused) {
+          bgMusic.play();
+        }
+      });
+
+      function checkForSavedGame() {
+        // Проверяем localStorage и cookie на наличие сохраненной игры
+        const savedLocal = localStorage.getItem('navy_battle_save');
+        let savedCookie = null;
+
+        try {
+          const m = document.cookie.match(/(?:^|; )navy_battle_save=([^;]+)/);
+          if (m) {
+            savedCookie = decodeURIComponent(m[1]);
+          }
+        } catch (e) {
+          console.log('Ошибка при чтении cookie:', e);
+        }
+
+        // Если есть сохраненная игра, показываем модальное окно
+        if (savedLocal || savedCookie) {
+          console.log('🎮 Найдена сохраненная игра');
+          document.getElementById('continue-modal').style.display = 'flex';
+        }
+      }
+
+      function continuePreviousGame() {
+        // Просто переходим на основную страницу (там загрузятся сохраненные данные)
+        console.log('📖 Продолжаем предыдущую игру');
+        window.location.href = 'main.html';
+      }
+
+      function startNewGame() {
+        // Очищаем все сохраненные данные
+        console.log('🔄 Начинаем новую игру');
+
+        // Очищаем localStorage
+        try {
+          localStorage.removeItem('navy_battle_save');
+          console.log('✓ localStorage очищен');
+        } catch (e) {
+          console.warn('Ошибка при очистке localStorage:', e);
+        }
+
+        // Очищаем cookie
+        try {
+          document.cookie = 'navy_battle_save=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+          console.log('✓ Cookie очищены');
+        } catch (e) {
+          console.warn('Ошибка при очистке cookie:', e);
+        }
+
+        // Скрываем модальное окно и показываем выбор команды
+        document.getElementById('continue-modal').style.display = 'none';
+        document.getElementById('team-select-section').style.display = 'block';
+      }
+
+      function startGame2Teams() {
+        // Показываем выбор команды
+        document.getElementById('team-select-section').style.display = 'block';
+      }
+
+      function selectStartTeam(teamNum) {
+        // Сохраняем выбранную команду в localStorage
+        localStorage.setItem('navy_battle_start_team', teamNum);
+        // Переходим на основную игровую страницу
+        window.location.href = 'main.html';
+      }
+
+      function startGameSingle() {
+        alert('Режим личной игры (одного игрока) пока недоступен');
+      }
+    </script>
+  </body>
+</html>

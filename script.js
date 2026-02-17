@@ -32,7 +32,8 @@ const SOUND_SINK = 'media/крушение.mp3';
 
 // Функция для воспроизведения фонового звука
 function playBackgroundMusic() {
-  const bgMusic = document.getElementById('bg-music');
+  // Пытаемся найти аудио элемент (может быть с разными id)
+  let bgMusic = document.getElementById('bg-music-game') || document.getElementById('bg-music');
   if (bgMusic) {
     bgMusic.volume = 0.3; // Устанавливаем громкость на 30%, чтобы не мешал
     bgMusic.play().catch((e) => {
@@ -887,4 +888,14 @@ function endGame() {
   clearSavedState();
 }
 
-window.onload = init;
+window.onload = async () => {
+  // Проверяем, была ли выбрана команда для начала игры
+  const startTeam = localStorage.getItem('navy_battle_start_team');
+  if (startTeam) {
+    activeTeam = parseInt(startTeam);
+    console.log(`🎯 Начиная игру с команды: ${activeTeam === 1 ? 'СИНИЙ' : 'КРАСНЫЙ'} ФЛОТ`);
+    localStorage.removeItem('navy_battle_start_team'); // Удаляем после использования
+  }
+
+  await init();
+};
