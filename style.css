@@ -59,6 +59,17 @@ h1 {
   font-family: monospace;
 }
 
+.game-timer-box {
+  background: #000;
+  border: 2px solid #ff4b2b;
+  padding: 10px 20px;
+  font-size: 28px;
+  color: #ff4b2b;
+  border-radius: 15px;
+  font-family: monospace;
+  font-weight: bold;
+}
+
 .main-game {
   display: flex;
   flex-direction: row;

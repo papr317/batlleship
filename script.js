@@ -5,6 +5,9 @@ let ships = { 1: [], 2: [] };
 let isProcessing = false,
   timerId = null,
   timeLeft = 120;
+let gameTimerId = null,
+  gameTimeLeft = 1800; // 30 минут = 1800 секунд
+let gameStartTime = null; // Время начала игры
 let currentQuestionData = null;
 let usedQuestions = new Set();
 let embargoList = {};
@@ -84,6 +87,7 @@ async function init() {
   updateFieldVisuals();
   updateUI();
   startTimer();
+  startGameTimer(); // Запуск таймера на 30 минут для всей игры
   setInterval(checkEmbargo, 1000); // Проверка блокировок каждую секунду
   console.log('✅ ИГРА НАЧАТА!');
 }
@@ -296,6 +300,68 @@ function startTimer() {
   }, 1000);
 }
 
+// Таймер на 30 минут для всей игры
+function startGameTimer() {
+  if (gameTimerId) clearInterval(gameTimerId);
+
+  // Если игра только начинается, сохраняем время начала
+  if (!gameStartTime) {
+    gameStartTime = Date.now();
+    gameTimeLeft = 1800; // 30 минут в секундах
+  }
+
+  gameTimerId = setInterval(() => {
+    gameTimeLeft--;
+
+    // Сохраняем состояние таймера через каждые 5 секунд
+    if (gameTimeLeft % 5 === 0) {
+      saveGameState();
+    }
+
+    // Обновляем отображение таймера игры
+    const minutes = Math.floor(gameTimeLeft / 60);
+    const seconds = gameTimeLeft % 60;
+    document.getElementById('game-timer').innerText =
+      `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+    // Когда время истекает, показываем окно с поздравлением
+    if (gameTimeLeft <= 0) {
+      clearInterval(gameTimerId);
+      endGameByTime();
+    }
+  }, 1000);
+}
+
+// Функция для завершения игры по истечении времени
+function endGameByTime() {
+  console.log('🎉 ВРЕМЯ ИГРЫ ИСТЕКЛО!');
+  console.log(`📊 ФИНАЛЬНЫЕ БАЛЛЫ - СИНИЙ ФЛОТ: ${scores[1]}, КРАСНЫЙ ФЛОТ: ${scores[2]}`);
+
+  // Останавливаем основной таймер
+  clearInterval(timerId);
+
+  // Отображаем финальные очки в модальном окне
+  document.getElementById('game-over-s1').innerText = scores[1];
+  document.getElementById('game-over-s2').innerText = scores[2];
+
+  // Определяем сообщение о победителе
+  let winnerMessage = '';
+  if (scores[1] > scores[2]) {
+    winnerMessage = 'СИНИЙ ФЛОТ одержал победу!';
+  } else if (scores[2] > scores[1]) {
+    winnerMessage = 'КРАСНЫЙ ФЛОТ одержал победу!';
+  } else {
+    winnerMessage = 'Ничья!';
+  }
+  document.getElementById('game-over-message').innerText = winnerMessage;
+
+  // Очищаем сохраненное состояние игры
+  clearSavedState();
+
+  // Показываем модальное окно с поздравлением
+  document.getElementById('game-over-modal').style.display = 'flex';
+}
+
 function setEmbargo(cellId) {
   console.log(`🚫 ЭМБАРГО установлено на клетку ${cellId} на 5 минут`);
   embargoList[cellId] = Date.now() + 5 * 60 * 1000; // 5 минут
@@ -411,6 +477,8 @@ function saveGameState() {
     usedQuestions: Array.from(usedQuestions),
     embargoList,
     revealedCells,
+    gameTimeLeft,
+    gameStartTime,
   };
   // Сохраняем в localStorage
   try {
@@ -456,6 +524,16 @@ function loadGameState() {
       usedQuestions = new Set(data.usedQuestions || []);
       embargoList = data.embargoList || {};
       revealedCells = data.revealedCells || {};
+
+      // Восстанавливаем состояние таймера игры
+      if (data.gameTimeLeft !== undefined && data.gameStartTime !== undefined) {
+        const elapsed = Math.floor((Date.now() - data.gameStartTime) / 1000);
+        gameTimeLeft = Math.max(0, data.gameTimeLeft - elapsed);
+        gameStartTime = data.gameStartTime;
+        console.log(
+          `⏱️ Восстановлен таймер игры: ${Math.floor(gameTimeLeft / 60)}:${(gameTimeLeft % 60).toString().padStart(2, '0')}`,
+        );
+      }
     } catch (e) {
       console.warn('Failed to parse saved state', e);
     }
@@ -509,6 +587,10 @@ function restoreVisualState() {
 }
 
 function clearSavedState() {
+  // Очищаем переменную таймера игры
+  gameStartTime = null;
+  gameTimeLeft = 1800;
+
   try {
     localStorage.removeItem('navy_battle_save');
   } catch (e) {
@@ -753,6 +835,7 @@ function updateUI() {
 
 function endGame() {
   clearInterval(timerId);
+  clearInterval(gameTimerId); // Останавливаем таймер игры
   console.log('🏁 КОНЕЦ ИГРЫ!');
   console.log(`📊 ФИНАЛЬНЫЕ БАЛЛЫ - СИНИЙ ФЛОТ: ${scores[1]}, КРАСНЫЙ ФЛОТ: ${scores[2]}`);
   const modal = document.getElementById('finish-modal');
